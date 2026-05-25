@@ -1,261 +1,364 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-#=============================================
-# 본 프로그램은 자이트론에서 제작한 것입니다.
-# 상업라이센스에 의해 제공되므로 무단배포 및 상업적 이용을 금합니다.
-# 교육과 실습 용도로만 사용가능하며 외부유출은 금지됩니다.
-#=============================================
-import rclpy, time, cv2, os, math
+import rclpy
+import time
+import cv2
+import math
 import numpy as np
 from rclpy.node import Node
 from xycar_msgs.msg import XycarMotor
-from sensor_msgs.msg import Image
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import Image, LaserScan, Imu
 from rclpy.qos import qos_profile_sensor_data
-from rclpy.duration import Duration
 from cv_bridge import CvBridge
 
-#=============================================
-# ROS2 Node 클래스 정의
-#=============================================
-class TrackDriverNode(Node):
+# ==========================================
+# State Machine 정의 (구간별 상태)
+# ==========================================
+STATE_THREE_LIGHT = "THREE_LIGHT"       # 1. 3구 신호등
+STATE_CONE = "CONE"                     # 2. 라바콘 구간
+STATE_STRAIGHT_1 = "STRAIGHT_1"         # 3. 첫번째 직진 (체크보드 이후)
+STATE_FOUR_LIGHT = "FOUR_LIGHT"         # 4. 4구 신호등
+STATE_STRAIGHT_2 = "STRAIGHT_2"         # 5. 두번째 직진
+STATE_ZIGZAG = "ZIGZAG"                 # 6. 지그재그 (+보행자)
+STATE_OVERTAKE = "OVERTAKE"             # 7. 추월 구간
+STATE_INTERSECTION = "INTERSECTION"     # 8. 교차로 직진 (로직상 STRAIGHT_2나 OVERTAKE 이후로 통합 가능)
+STATE_SCHOOL_ZONE = "SCHOOL_ZONE"       # 9. 어린이 보호구역
+STATE_TURN_1 = "TURN_1"                 # 10. 첫번째 좌회전
+STATE_STRAIGHT_3 = "STRAIGHT_3"         # 11. 세번째 직진
+STATE_TURN_2 = "TURN_2"                 # 12. 두번째 좌회전 (이후 체크보드)
 
-    #=============================================
-    # 클래스 생성 초기화 함수
-    #=============================================
+# 지름길 전용 상태 (2, 3바퀴째)
+STATE_SHORTCUT_LEFT1 = "SHORTCUT_LEFT1" # 16. 지름길 진입 좌회전
+STATE_SHORTCUT_DRIVE = "SHORTCUT_DRIVE" # 17. 지름길 직진
+STATE_SHORTCUT_LEFT2 = "SHORTCUT_LEFT2" # 18. 지름길 탈출 좌회전 (이후 SCHOOL_ZONE 연결)
+
+STATE_FINISH = "FINISH"                 # 3바퀴 완주 종료
+
+class TrackDriverNode(Node):
     def __init__(self):
-        super().__init__('driver')
-        self.get_logger().info('----- Xycar self-driving node started -----')
+        super().__init__('track_driver')
         
-        # 상수값 및 초기값 설정
-        self.image = None              # 카메라 토픽 데이터를 저장할 변수
-        self.motor_msg = XycarMotor()  # 모터토픽 메시지        
-        self.lidar_ranges = None       # 라이다 토픽 데이터를 저장할 변수
+        # ROS2 Publisher & Subscriber
+        self.motor_pub = self.create_publisher(XycarMotor, '/xycar_motor', 10)
+        self.img_sub = self.create_subscription(Image, '/usb_cam/image_raw/front', self.img_callback, qos_profile_sensor_data)
+        self.lidar_sub = self.create_subscription(LaserScan, '/scan', self.lidar_callback, qos_profile_sensor_data)
+        self.imu_sub = self.create_subscription(Imu, '/imu', self.imu_callback, qos_profile_sensor_data)
+        
         self.bridge = CvBridge()
         
-        # [확장] 주행 상태 관리를 위한 변수 선언 (디버깅 및 수정 용이)
-        self.current_lap = 1           # 현재 바퀴 수 (1, 2, 3바퀴)
-        self.current_state = "WAIT_3_LIGHT"  # 현재 차량의 주행 상태 (상태 머신)
+        # 센서 데이터 저장 변수
+        self.cv_image = None
+        self.lidar_data = None
+        self.imu_data = None
         
-        # ROS2 Publisher & Subscriber 설정
-        self.motor_pub = self.create_publisher(XycarMotor, 'xycar_motor', 10)
+        # 주행 상태 관리 변수
+        self.current_state = STATE_THREE_LIGHT
+        self.lap_count = 0
+        self.checkboard_cooldown = 0.0 # 중복 인식 방지용 타이머
         
-        self.sub_front = self.create_subscription(
-            Image, '/usb_cam/image_raw/front', self.cam_callback, qos_profile_sensor_data)
+        # 제어 주기: 10Hz (0.1초마다 control_loop 실행)
+        self.timer = self.create_timer(0.1, self.control_loop)
+        self.get_logger().info("Track Driver Node Started! Waiting for sensor data...")
 
-        self.subscription = self.create_subscription(
-            LaserScan, '/scan', self.lidar_callback, qos_profile_sensor_data)
-        
-        self.get_logger().info("Track Driver Node Initialized")
-              
-    #=============================================
-    # 카메라 토픽을 수신하는 콜백 함수
-    #=============================================
-    def cam_callback(self, data):
-        # 수신한 메시지를 OpenCV 이미지로 변환하여 저장
-        self.image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-    
-    #=============================================
-    # 라이다 토픽을 수신하는 콜백 함수
-    #=============================================
+    # ==========================================
+    # 콜백 함수 (센서 데이터 업데이트)
+    # ==========================================
+    def img_callback(self, msg):
+        self.cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+
     def lidar_callback(self, msg):
-        self.lidar_ranges = msg.ranges   
-      
-    #=============================================
-    # 모터제어 토픽을 발행하는 Publisher 함수 (안전장치 포함)
-    #=============================================
-    def drive(self, angle, speed):
-        # 조작 패널 사양 및 차량 보호를 위한 값 제한 (Clamp)
-        # 조향각 제한: -100 ~ 100, 속도 제한: -50 ~ 50
-        bounded_angle = max(-100.0, min(100.0, float(angle)))
-        bounded_speed = max(-50.0, min(50.0, float(speed)))
+        self.lidar_data = np.array(msg.ranges)
 
-        self.motor_msg.angle = bounded_angle
-        self.motor_msg.speed = bounded_speed
-        self.motor_pub.publish(self.motor_msg)
+    def imu_callback(self, msg):
+        self.imu_data = msg
 
-    #=======================================================
-    # [설계] 인지(Perception) 및 판단 함수 정의 파트
-    #=======================================================
-    
-    def check_3_light_green(self):
-        """ 미션 1: 3구 신호등이 녹색(파란불)인지 판별 """
-        if self.image is None:
-            return False
+    # ==========================================
+    # 메인 제어 루프 (FSM 기반)
+    # ==========================================
+    def control_loop(self):
+        # 센서 데이터가 모두 들어올 때까지 대기
+        if self.cv_image is None or self.lidar_data is None:
+            return
 
-        # 1. 사용자가 마우스로 획득한 픽셀 좌표 기반 ROI 지정 
-        # Numpy Array 슬라이싱 구조: [Y_시작:Y_끝, X_시작:X_끝]
-        roi = self.image[87:144, 336:393]
-
-        # 2. 조명 변화에 강건한 HSV 색 공간 변환
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-
-        # 3. 초록색(파란불) 불빛의 HSV 검출 범위 정의
-        lower_green = np.array([35, 100, 100])
-        upper_green = np.array([85, 255, 255])
-
-        # 4. 범위 안의 픽셀만 흰색(255)으로 걸러내는 마스크 생성
-        mask = cv2.inRange(hsv, lower_green, upper_green)
-
-        # 5. 마스크 내부의 흰색 픽셀(녹색 신호) 개수 카운트
-        green_pixel_count = cv2.countNonZero(mask)
-
-        # =======================================================
-        # [실시간 디버깅 창] 신호가 잘 잡히는지 눈으로 확인하는 뷰어
-        # 대회 도중 시각화가 불필요해지면 아래 3줄은 주석 처리.
-        # =======================================================
-        # cv2.imshow("Traffic Light ROI", roi)
-        cv2.imshow("Green Filter Mask", mask)
-        cv2.waitKey(1)
-
-        # 6. 기준 픽셀 수(Threshold) 초과 시 True 리턴하여 출발 신호 발생
-        # 총 픽셀 수(57 * 57 = 3249) 중 불빛이 들어왔을 때의 임계값을 300으로 설정
-        if green_pixel_count > 300:
-            self.get_logger().info(f"🟢 초록불 픽셀 수: {green_pixel_count} -> 출발!")
-            return True
+        angle, speed = 0.0, 0.0
         
-        return False
+        # 전역적으로 체크보드(랩 카운트) 감지
+        self.check_lap_count()
 
-    def process_lidar_cones(self):
-        """ 미션 2: 라바콘 사이를 주행하기 위한 조향각 및 속도 계산 """
-        # TODO: self.lidar_ranges 정보를 파싱하여 좌/우 라바콘 중심점 추종
-        angle = 0.0
-        speed = 5.0
-        return angle, speed
+        # 상태 머신 (State Machine)
+        if self.current_state == STATE_THREE_LIGHT:
+            angle, speed, status = self.three()
+            if status == "go":
+                self.current_state = STATE_CONE
 
-    def process_lane_following(self):
-        """ 미션 3, 5, 6: 아스팔트 차선 인식 및 곡률 기반 주행 제어 """
-        # TODO: OpenCV 차선 인식을 통해 직선 구간(가속), 지그재그(감속 및 차선 허용) 제어
-        angle = 0.0
-        speed = 8.0  # 직선구간 가속 및 지그재그구간 속도 가변 제어 필요
-        return angle, speed
+        elif self.current_state == STATE_CONE:
+            angle, speed, status = self.cone()
+            if status == "passed":
+                self.current_state = STATE_STRAIGHT_1
 
-    def check_4_light_and_police(self):
-        """ 미션 4: 4구 신호등 상태 및 지름길 경찰차 유무 판별 """
-        # TODO: 4구 신호등 화살표(좌회전) 인식 및 카메라/라이다로 경찰차 방해물 체크
-        # 반환값 예시: "STRAIGHT" (직진해야함), "SHORTCUT" (지름길 진입가능)
-        return "STRAIGHT"
+        elif self.current_state == STATE_STRAIGHT_1:
+            angle, speed, status = self.straight()
+            if status == "stop_line_detected": # 4구 신호등 앞 정지선 발견 시
+                self.current_state = STATE_FOUR_LIGHT
 
-    def process_shortcut(self):
-        """ 미션 4-지름길: 장애물이 떨어지는 유동적 차선 주행 """
-        # TODO: 차선이 유실되거나 방해물이 떨어질 때의 예외 주행 알고리즘
-        angle = 0.0
-        speed = 6.0
-        return angle, speed
+        elif self.current_state == STATE_FOUR_LIGHT:
+            angle, speed, decision = self.four()
+            if decision == "straight":
+                self.current_state = STATE_STRAIGHT_2
+            elif decision == "left":
+                self.current_state = STATE_SHORTCUT_LEFT1
 
-    def process_avoidance_and_school(self, speed):
-        """ 미션 5, 6, 7: 보행자 회피, 방해차량 추월, 어린이 보호구역 통합 제어 """
-        # TODO: 주행 중 라이다 감지 시 보행자/차량 회피 및 바닥 인식을 통한 속도 제어
-        # 이 함수는 계산된 기본 speed를 입력받아 최종 안전 speed를 리턴 조절하도록 설계
-        final_speed = speed
-        return final_speed
+        elif self.current_state == STATE_STRAIGHT_2:
+            angle, speed, status = self.straight()
+            if status == "zigzag_start": # 지그재그 진입조건 만족 시
+                self.current_state = STATE_ZIGZAG
 
-    def is_checkerboard_detected(self):
-        """ 바퀴 수 누적을 위한 체커보드 마커 감지 """
-        # TODO: 카메라 하단 영역에서 체커보드 패턴 혹은 특정 마커 인식 시 True
-        return False
+        elif self.current_state == STATE_ZIGZAG:
+            angle, speed, status = self.zigzag()
+            if status == "passed":
+                self.current_state = STATE_OVERTAKE
 
-    #=============================================
-    # 메인 루프 (상태 머신 구동 및 데이터 갱신)
-    #=============================================
-    def main_loop(self):
-    
-        self.get_logger().info("======================================")
-        self.get_logger().info("   S T A R T   D R I V I N G ...      ")
-        self.get_logger().info("======================================")
+        elif self.current_state == STATE_OVERTAKE:
+            angle, speed, status = self.fast()
+            if status == "passed":
+                self.current_state = STATE_SCHOOL_ZONE
 
-        while rclpy.ok():
-            # [★가장 중요★] 루프 안에서 spin_once를 호출해야 센서 콜백 데이터가 실시간 갱신됩니다!
-            rclpy.spin_once(self, timeout_sec=0.01)
+        elif self.current_state == STATE_SCHOOL_ZONE:
+            angle, speed, status = self.slow()
+            if status == "passed":
+                self.current_state = STATE_TURN_1
 
-            # 초기 데이터 미수신 상태 예외 처리 (None 에러 방지)
-            if self.image is None or self.lidar_ranges is None:
-                continue
+        elif self.current_state == STATE_TURN_1:
+            angle, speed, status = self.turn("left")
+            if status == "passed":
+                self.current_state = STATE_STRAIGHT_3
 
-            #---------------------------------------------------
-            # 공통 매커니즘: 바퀴 수 완료 체크 (체커보드 인식)
-            #---------------------------------------------------
-            if self.is_checkerboard_detected():
-                self.current_lap += 1
-                self.get_logger().info(f"체커보드 통과! 현재 바퀴 수: {self.current_lap}/3")
-                
-                if self.current_lap > 3:
-                    self.current_state = "FINISHED"
-                else:
-                    # 2, 3바퀴째는 3구 신호등과 라바콘이 없으므로 바로 차선주행 상태로 리셋
-                    self.current_state = "LANE_DRIVE"
-                time.sleep(0.5) # 중복 인식 방지 디레이
+        elif self.current_state == STATE_STRAIGHT_3:
+            angle, speed, status = self.straight()
+            if status == "curve_start":
+                self.current_state = STATE_TURN_2
 
-            #---------------------------------------------------
-            # 핵심 자율주행 상태 머신 (State Machine)
-            #---------------------------------------------------
-            target_angle = 0.0
-            target_speed = 0.0
+        elif self.current_state == STATE_TURN_2:
+            angle, speed, status = self.turn("left")
+            if status == "passed":
+                # 턴을 완료하면 다음 바퀴를 위한 첫 직선 코스(4구 신호등 향하는 길)로 변경됨
+                # 단, 실제 Lap 갱신은 checkboard 인식 함수가 처리함
+                self.current_state = STATE_STRAIGHT_1
 
-            if self.current_state == "WAIT_3_LIGHT":
-                # 미션 1: 멈춘 상태로 3구 신호등 대기
-                self.get_logger().info("상태: 3구 신호등 파란불 대기 중...", once=True)
-                if self.check_3_light_green():
-                    self.get_logger().info("파란불 점등! 라바콘 구간으로 진입합니다.")
-                    self.current_state = "CONE_DRIVE"
-                else:
-                    target_angle, target_speed = 0.0, 0.0
+        # 지름길 루트 상태
+        elif self.current_state == STATE_SHORTCUT_LEFT1:
+            angle, speed, status = self.left1()
+            if status == "passed":
+                self.current_state = STATE_SHORTCUT_DRIVE
 
-            elif self.current_state == "CONE_DRIVE":
-                # 미션 2: 라바콘 곡선 구간 통과 (1바퀴째 전용)
-                target_angle, target_speed = self.process_lidar_cones()
-                
-                # 라바콘 구간 탈출 조건 (예: 전방 라바콘 청소 완료 및 아스팔트 감지 시)
-                # 실전 테스트 후 조건 만족 시 상태 변경 작성: self.current_state = "LANE_DRIVE"
-                pass 
+        elif self.current_state == STATE_SHORTCUT_DRIVE:
+            angle, speed, status = self.shortcut()
+            if status == "intersection_reached":
+                self.current_state = STATE_SHORTCUT_LEFT2
 
-            elif self.current_state == "LANE_DRIVE":
-                # 미션 3, 5, 6, 7: 일반 아스팔트 주행 및 부가 미션 대응
-                target_angle, target_speed = self.process_lane_following()
-                
-                # 안전 미션(보행자, 추월, 어린이보호구역)에 따른 속도 가변 재가공
-                target_speed = self.process_avoidance_and_school(target_speed)
+        elif self.current_state == STATE_SHORTCUT_LEFT2:
+            angle, speed, status = self.left2()
+            if status == "passed":
+                self.current_state = STATE_SCHOOL_ZONE
 
-                # 4구 신호등 교차로 부근에 도달했을 때 분기 판단
-                if self.current_lap in [2, 3]:
-                    decision = self.check_4_light_and_police()
-                    if decision == "SHORTCUT":
-                        self.get_logger().info("지름길 진입 조건을 만족하여 회전합니다!")
-                        self.current_state = "SHORTCUT_DRIVE"
+        elif self.current_state == STATE_FINISH:
+            angle, speed = 0.0, 0.0
+            self.get_logger().info("🏁 3 Laps Completed! Driving Finished. 🏁")
 
-            elif self.current_state == "SHORTCUT_DRIVE":
-                # 미션 4: 2, 3바퀴째 지름길 전용 특수 주행
-                target_angle, target_speed = self.process_shortcut()
+        # 모터 제어 명령 퍼블리시
+        self.publish_motor(angle, speed)
 
-            elif self.current_state == "FINISHED":
-                # 3바퀴 최종 완주 상태
-                self.get_logger().info("모든 트랙 완주! 차량을 정지합니다.")
-                target_angle, target_speed = 0.0, 0.0
-                self.drive(target_angle, target_speed)
-                break
+    # ==========================================
+    # 주행 알고리즘 함수들
+    # ==========================================
 
-            # 최종 가공된 조향각과 속도로 차량 구동
-            self.drive(target_angle, target_speed)
+    def check_lap_count(self):
+        """
+        바닥의 체크보드 무늬를 카메라로 검출하여 바퀴 수(lap_count)를 증가시킴.
+        """
+        if time.time() - self.checkboard_cooldown < 10.0: # 10초 이내 중복 인식 방지
+            return
 
-#=============================================
-# 메인 함수
-#=============================================
+        # TODO: self.cv_image에서 체크보드 패턴 검출 로직 작성
+        is_checkboard_detected = False 
+        
+        if is_checkboard_detected:
+            self.lap_count += 1
+            self.get_logger().info(f"Lap Updated: {self.lap_count} / 3")
+            self.checkboard_cooldown = time.time()
+            if self.lap_count >= 3: # 3바퀴(진입 1번 포함 시 카운트 기준 조정 필요)
+                self.current_state = STATE_FINISH
+
+    def three(self):
+        """ 1. 3구 신호등 탐지 함수 """
+        angle, speed = 0.0, 0.0
+        status = "wait"
+        
+        # TODO: self.cv_image의 특정 ROI에서 초록색 픽셀 비율 분석
+        is_green_light = False
+        
+        if is_green_light:
+            status = "go"
+        return angle, speed, status
+
+    def cone(self):
+        """ 2. 라바콘 통과 함수 """
+        angle, speed = 0.0, 15.0 # 천천히 전진
+        status = "driving"
+        
+        # TODO: self.lidar_data를 분석하여 좌/우 라바콘 거리를 측정하고 중심점 추종 로직 작성
+        # TODO: 아스팔트(노란점선/흰실선)가 보이기 시작하면 통과로 간주
+        is_passed_cones = False 
+        
+        if is_passed_cones:
+            status = "passed"
+        return angle, speed, status
+
+    def straight(self):
+        """ 3, 5, 11. 직선 도로 직진 함수 (오른쪽 차선 주행) """
+        angle, speed = 0.0, 30.0
+        status = "driving"
+        
+        # TODO: 왼쪽 노란색 점선, 오른쪽 흰색 실선 인식 (HoughLines, Sliding Window 등)
+        # TODO: 멈춤선(가로 흰색 실선), 지그재그 시작점, 커브 시작점 등을 파악하여 status 리턴
+        stop_line_detected = False
+        
+        if stop_line_detected:
+            status = "stop_line_detected"
+            speed = 0.0 # 일단 멈춤
+            
+        return angle, speed, status
+
+    def four(self):
+        """ 4, 14. 4구 신호등 탐지 및 분기 판단 함수 """
+        angle, speed = 0.0, 0.0 # 기본적으로 정지 상태에서 판단
+        decision = "wait"
+        
+        # TODO: 전방 4구 신호등 색상 검출 (빨, 주, 좌, 초)
+        light_color = "red" 
+        
+        # TODO: 좌측 방향 Lidar 데이터를 확인하여 장애물(경찰차) 여부 판별
+        left_obstacle_exist = False 
+        
+        if self.lap_count == 0: # 1번째 바퀴: 무조건 직진
+            if light_color == "green":
+                decision = "straight"
+        else: # 2, 3번째 바퀴
+            if left_obstacle_exist: # 경찰차 있음 -> 무조건 직진
+                if light_color == "green":
+                    decision = "straight"
+            else: # 경찰차 없음 -> 신호에 따름
+                if light_color == "left_arrow":
+                    decision = "left"
+                elif light_color == "green":
+                    decision = "straight"
+                    
+        return angle, speed, decision
+
+    def zigzag(self):
+        """ 6. 지그재그 구간 함수 """
+        # TODO: 내부에서 self.turn()과 self.person()을 활용하여 로직 구성
+        # 노란색 점선을 차량 중심에 맞추는 로직 작성
+        status = "driving"
+        
+        # 사람 발견 시 person() 실행 로직 예시
+        # if pedestrian_detected:
+        #    return self.person()
+        
+        is_passed_zigzag = False
+        if is_passed_zigzag:
+            status = "passed"
+            
+        return 0.0, 20.0, status
+
+    def turn(self, direction):
+        """ 6, 10, 12. 곡선 도로 턴 함수 """
+        angle, speed = 0.0, 20.0
+        status = "driving"
+        
+        # TODO: 곡선 차선 인식 및 조향 알고리즘. direction 변수("left" or "right")에 맞춰 로직 차별화
+        is_turn_completed = False
+        
+        if is_turn_completed:
+            status = "passed"
+        return angle, speed, status
+
+    def person(self):
+        """ 6. 사람 피하기 함수 """
+        # TODO: Lidar로 전방 사람 인식, 좌/우측 공간 파악하여 회피 조향 및 복귀
+        status = "avoiding"
+        return 0.0, 10.0, status
+
+    def fast(self):
+        """ 7. 차량 추월 함수 """
+        angle, speed = 0.0, 40.0 # 평소보다 빠르게
+        status = "driving"
+        
+        # TODO: Lidar로 왼쪽/오른쪽 차량 거리 추적, 왼쪽 차선으로 변경 후 추월, 다시 오른쪽 차선 복귀 로직
+        is_overtaken = False
+        if is_overtaken:
+            status = "passed"
+        return angle, speed, status
+
+    def slow(self):
+        """ 9. 어린이 보호구역 함수 """
+        angle, speed = 0.0, 15.0 # 속도 줄임
+        status = "driving"
+        
+        # TODO: 바닥의 "보호구역 해제" 글자 혹은 특정 마커 인식
+        is_end_of_school_zone = False
+        if is_end_of_school_zone:
+            status = "passed"
+        return angle, speed, status
+
+    def left1(self):
+        """ 16. 4구 신호등 -> 지름길 좌회전 함수 """
+        # TODO: 교차로에서 90도 좌회전하여 지름길 차선에 진입하는 로직
+        status = "passed" # 턴 완료 시
+        return -30.0, 20.0, status
+
+    def shortcut(self):
+        """ 17. 지름길 직진 (선 끊김 구간) 함수 """
+        angle, speed = 0.0, 30.0
+        status = "driving"
+        
+        # TODO: 장애물로 차선이 가려진 구간. 차선이 안 보일 경우 IMU의 Yaw값을 유지하며 직진하는 로직
+        # TODO: 끝단 교차로 인식 시 status 갱신
+        intersection_detected = False
+        if intersection_detected:
+            status = "intersection_reached"
+        return angle, speed, status
+
+    def left2(self):
+        """ 18. 지름길 끝 -> 어린이보호구역 좌회전 함수 """
+        # TODO: 지름길 탈출을 위한 90도 좌회전 로직
+        status = "passed" # 턴 완료 시
+        return -30.0, 20.0, status
+
+    # ==========================================
+    # 모터 제어 퍼블리시
+    # ==========================================
+    def publish_motor(self, angle, speed):
+        # Angle (-100 ~ 100), Speed (-50 ~ 50) Limit
+        angle = max(min(angle, 100.0), -100.0)
+        speed = max(min(speed, 50.0), -50.0)
+        
+        msg = XycarMotor()
+        msg.angle = float(angle)
+        msg.speed = float(speed)
+        self.motor_pub.publish(msg)
+
 def main(args=None):
-      
     rclpy.init(args=args)
     node = TrackDriverNode()
-    
     try:
-        # main_loop() 함수를 호출하여 실행합니다.
-        node.main_loop()
+        rclpy.spin(node)
     except KeyboardInterrupt:
-        # 사용자 인터럽트 (Ctrl+C)가 발생하면 예외를 처리합니다.
-        pass
+        node.get_logger().info('Keyboard Interrupt (SIGINT)')
     finally:
-        # 노드를 종료하고 ROS2를 정리합니다.
-        node.drive(angle=0, speed=0)
-        cv2.destroyAllWindows()
+        # 종료 시 차량 정지
+        node.publish_motor(0.0, 0.0)
         node.destroy_node()
         rclpy.shutdown()
 
