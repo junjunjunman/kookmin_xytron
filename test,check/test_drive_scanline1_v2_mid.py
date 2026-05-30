@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import rclpy
+from rclpy.node import Node
+import cv2
+import numpy as np
+from sensor_msgs.msg import Image, LaserScan
+from xycar_msgs.msg import XycarMotor
+from rclpy.qos import qos_profile_sensor_data
+from cv_bridge import CvBridge
+
+class StraightTestNode(Node):
+    def __init__(self):
+        super().__init__('straight_test_node')
+        
+        # ROS2 카메라 구독 설정
+        self.img_sub = self.create_subscription(
+            Image, 
+            '/usb_cam/image_raw/front', 
+            self.img_callback, 
+            qos_profile_sensor_data
+        )
+        
+        # [추가] ROS2 라이다 구독 설정 (보행자 정밀 탐지용)
+        self.lidar_sub = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.lidar_callback,
+            qos_profile_sensor_data
+        )
+        
+        self.motor_pub = self.create_publisher(XycarMotor, '/xycar_motor', 10)
+        self.bridge = CvBridge()
+        
+        # 차선 추적 연속성 유지 변수
+        self.prev_L = None
+        self.prev_M = None
+        self.prev_R = None
+        
+        # 보행자 정지 시 직전 상태 기억을 위한 변수
+        self.lidar_ranges = None
+        self.last_normal_angle = 0.0
+        self.last_normal_speed = 15.0
+        
+        self.get_logger().info("🚀 Straight Line & Pedestrian Test Node Started!")
+
+    def lidar_callback(self, msg):
+        """ 라이다 데이터를 받아 저장 """
+        self.lidar_ranges = np.array(msg.ranges, dtype=np.float32)
+
+    def img_callback(self, msg):
+        try:
+            # ROS Image -> OpenCV BGR 이미지 변환 (680x480)
+            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+        except Exception as e:
+            self.get_logger().error(f"Bridge Error: {e}")
+            return
+
+        h, w, _ = frame.shape
+        display_img = frame.copy()
+
+        # 1. HSV 색상 공간 필터링 및 통합 차선 마스크 생성
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        
+        lower_yellow = np.array([15, 80, 80])
+        upper_yellow = np.array([35, 255, 255])
+        lower_white = np.array([0, 0, 180])
+        upper_white = np.array([180, 30, 255])
+
+        mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
+        mask_white = cv2.inRange(hsv, lower_white, upper_white)
+        mask_lane = cv2.bitwise_or(mask_yellow, mask_white)
+
+        # 2. 3차선 교점 인식 알고리즘 (Look-ahead 스캔 라인 65% 유지)
+        scan_y = int(h * 0.65)
+        mid_x = w // 2
+
+        scan_line_row = mask_lane[scan_y, :]
+        white_indices = np.where(scan_line_row == 255)[0]
+
+        centers = []
+        if len(white_indices) > 0:
+            current_cluster = [white_indices[0]]
+            for idx in white_indices[1:]:
+                if idx - current_cluster[-1] > 20:
+                    if len(current_cluster) >= 2:  
+                        centers.append(int(np.mean(current_cluster)))
+                    current_cluster = [idx]
+                else:
+                    current_cluster.append(idx)
+            if len(current_cluster) >= 2:
+                centers.append(int(np.mean(current_cluster)))
+
+        # 아스팔트 바깥 영역 노이즈 필터링 (화면 좌우 8% 마진 배제)
+        centers = [c for c in centers if int(w * 0.08) < c < int(w * 0.92)]
+
+        ideal_lane_width = int(w * 0.48)
+        half_width = ideal_lane_width // 2
+
+        # 기준 좌표(Reference) 업데이트
+        ref_L = self.prev_L if self.prev_L is not None else (mid_x - half_width)
+        ref_M = self.prev_M if self.prev_M is not None else mid_x
+        ref_R = self.prev_R if self.prev_R is not None else (mid_x + half_width)
+
+        det_L, det_M, det_R = None, None, None
+
+        # 비용 최소화 기반 차선 매칭 로직
+        if len(centers) >= 3:
+            det_L, det_M, det_R = centers[0], centers[1], centers[2]
+        elif len(centers) == 2:
+            cost_LM = abs(centers[0] - ref_L) + abs(centers[1] - ref_M)
+            cost_MR = abs(centers[0] - ref_M) + abs(centers[1] - ref_R)
+            cost_LR = abs(centers[0] - ref_L) + abs(centers[1] - ref_R)
+            
+            min_cost = min(cost_LM, cost_MR, cost_LR)
+            if min_cost == cost_LM:
+                det_L, det_M = centers[0], centers[1]
+            elif min_cost == cost_MR:
+                det_M, det_R = centers[0], centers[1]
+            else:
+                det_L, det_R = centers[0], centers[1]
+        elif len(centers) == 1:
+            cost_L = abs(centers[0] - ref_L)
+            cost_M = abs(centers[0] - ref_M)
+            cost_R = abs(centers[0] - ref_R)
+            
+            min_cost = min(cost_L, cost_M, cost_R)
+            if min_cost == cost_L:
+                det_L = centers[0]
+            elif min_cost == cost_M:
+                det_M = centers[0]
+            else:
+                det_R = centers[0]
+
+        # 기하학적 복구 알고리즘 (Reconstruction)
+        if det_L is not None and det_M is not None and det_R is not None:
+            final_L, final_M, final_R = det_L, det_M, det_R
+        elif det_L is not None and det_M is not None:
+            final_L, final_M = det_L, det_M
+            final_R = final_M + half_width
+        elif det_M is not None and det_R is not None:
+            final_M, final_R = det_M, det_R
+            final_L = final_M - half_width
+        elif det_L is not None and det_R is not None:
+            final_L, final_R = det_L, det_R
+            final_M = (final_L + final_R) // 2
+        elif det_L is not None:
+            final_L = det_L
+            final_M = final_L + half_width
+            final_R = final_L + ideal_lane_width
+        elif det_M is not None:
+            final_M = det_M
+            final_L = final_M - half_width
+            final_R = final_M + half_width
+        elif det_R is not None:
+            final_R = det_R
+            final_M = final_R - half_width
+            final_L = final_R - ideal_lane_width
+        else:
+            final_L, final_M, final_R = ref_L, ref_M, ref_R
+
+        # 차선 유동 변동성 감지
+        lane_shift_rate = 0
+        if self.prev_L is not None and self.prev_M is not None and self.prev_R is not None:
+            shift_L = abs(final_L - self.prev_L)
+            shift_M = abs(final_M - self.prev_M)
+            shift_R = abs(final_R - self.prev_R)
+            lane_shift_rate = max(shift_L, shift_M, shift_R)
+
+        is_lane_corrupted = False
+        if (final_L >= final_M) or (final_M >= final_R) or (final_R - final_L > ideal_lane_width * 1.5) or (final_R - final_L < ideal_lane_width * 0.5):
+            is_lane_corrupted = True
+
+        # 기본 주행 세팅
+        base_speed = 20.0
+        base_kp = 0.4
+        status_text = "DRIVING"
+        box_color = (255, 255, 0)
+        
+        # [수정] 기존 M, R의 중앙 주행에서 L, R의 중앙 주행으로 변경
+        target_x = (final_L + final_R) // 2
+        error = target_x - mid_x
+
+        # 3. 정상 차선 추종 제어 및 노란선 양방향 감지
+        if not is_lane_corrupted:
+            adaptive_kp = base_kp
+            if lane_shift_rate > 10 or abs(error) > int(w * 0.05):
+                status_text = "ADAPTIVE CURVE MODE"
+                box_color = (0, 165, 255)
+                adaptive_kp += (lane_shift_rate * 0.02) + (abs(error) * 0.004)
+                adaptive_kp = min(adaptive_kp, 1.2)
+
+            calc_angle = float(error * adaptive_kp)
+            
+            angle_penalty = abs(calc_angle) * 0.32  
+            shift_penalty = lane_shift_rate * 0.15
+            calc_speed = base_speed - angle_penalty - shift_penalty
+            
+            if abs(calc_angle) > 15.0 or lane_shift_rate > 12:
+                calc_speed = min(calc_speed, 8.0)
+            calc_speed = max(7.0, calc_speed)
+            
+            # [NEW] 좌우 차선 모두 노란색인지 확인 (오차 감안하여 +-15 픽셀 범위 검사)
+            check_window = 15
+            is_L_yellow = np.any(mask_yellow[scan_y, max(0, final_L - check_window):min(w, final_L + check_window)] == 255)
+            is_R_yellow = np.any(mask_yellow[scan_y, max(0, final_R - check_window):min(w, final_R + check_window)] == 255)
+            
+            if is_L_yellow and is_R_yellow:
+                # 양쪽 모두 노란색 차선인 경우: 각도는 유지하되 속도만 5.0으로 감속
+                status_text = "YELLOW LANE MODE (SLOW)"
+                box_color = (0, 255, 255) # 노란색 텍스트
+                calc_speed = 5.0
+            
+            # 다음 프레임용 변수 업데이트
+            self.prev_L, self.prev_M, self.prev_R = final_L, final_M, final_R
+        else:
+            status_text = "GUARDRAIL RECOVERY"
+            box_color = (0, 0, 255)
+            calc_speed = 4.0  
+            
+            left_weight = np.sum(mask_lane[scan_y:, :mid_x] == 255)
+            right_weight = np.sum(mask_lane[scan_y:, mid_x:] == 255)
+            
+            if right_weight > left_weight * 1.3:
+                calc_angle = -30.0  
+            elif left_weight > right_weight * 1.3:
+                calc_angle = 30.0   
+            else:
+                calc_angle = float(error * base_kp)
+                calc_speed = 5.5
+
+        # -------------------------------------------------------------------
+        # 4. [NEW] 전방 라이다 보행자 정밀 탐지 (화각 및 거리 상향)
+        # -------------------------------------------------------------------
+        person_detected = False
+        if self.lidar_ranges is not None:
+            # 차량 정면 기준 좌우 70도 영역(-70도 ~ 70도) 거리 스캔 (보행자가 완전히 지나갈 때까지 대기)
+            front_idx = list(range(0, 70)) + list(range(330, 360))
+            front_ranges = self.lidar_ranges[front_idx]
+            
+            # 0.0(미감지)이나 무한대 값을 제외한 유효 거리 추출
+            valid_front = front_ranges[front_ranges > 0.1]
+            
+            if len(valid_front) > 0:
+                min_front_dist = np.min(valid_front)
+                # 정면 1.5 미터 이내에 장애물(사람)이 있으면 감지 트리거 작동
+                if min_front_dist < 1.5:
+                    person_detected = True
+                    cv2.putText(display_img, f"WARNING: OBSTACLE AT {min_front_dist:.2f}m", 
+                                (mid_x - 120, int(h * 0.4)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 3)
+
+        # 보행자 감지 여부에 따른 최종 제어값(angle, speed) 확정
+        if person_detected:
+            status_text = "PERSON STOP (HOLDING STATE)"
+            box_color = (0, 0, 255)
+            angle = self.last_normal_angle
+            speed = 0.0
+        else:
+            angle = calc_angle
+            speed = calc_speed
+            self.last_normal_angle = angle
+            self.last_normal_speed = speed
+
+        # -------------------------------------------------------------------
+        # 5. [수정] 체크보드 면역력 강화된 50% 비율 정지선 판단 로직
+        # -------------------------------------------------------------------
+        roi_x_start = int(w * 0.25)
+        roi_x_end = int(w * 0.75)
+        roi_y_start = int(h * 0.70)
+        roi_y_end = int(h * 0.80)
+
+        stop_line_roi = mask_white[roi_y_start:roi_y_end, roi_x_start:roi_x_end]
+        
+        roi_area = (roi_x_end - roi_x_start) * (roi_y_end - roi_y_start)
+        white_pixel_count = np.sum(stop_line_roi == 255)
+        white_ratio = white_pixel_count / roi_area
+
+        # 사람이 감지되어 서있는 상태가 아닐 때만 정지선 검사 수행
+        if not person_detected:
+            is_checkerboard = False
+            
+            # 흰색 비율이 어느 정도 높을 때, 이게 정지선인지 체크보드인지 컨투어(덩어리)로 판별
+            if white_ratio > 0.15: 
+                contours, _ = cv2.findContours(stop_line_roi.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                valid_blobs = [c for c in contours if cv2.contourArea(c) > 50]
+                
+                # 흰색 덩어리가 3개 이상 쪼개져 있으면 체크보드(격자무늬)로 간주
+                if len(valid_blobs) >= 3:
+                    is_checkerboard = True
+
+            # 정지선 vs 체크보드 최종 판단
+            if is_checkerboard:
+                status_text = f"CHECKERBOARD (PASS)"
+                box_color = (255, 0, 255) # 보라색 텍스트
+                # speed와 angle은 현재 주행값(calc_speed, calc_angle)을 그대로 유지 (멈추지 않음)
+            elif white_ratio >= 0.70:
+                status_text = f"STOP LINE (Ratio: {white_ratio*100:.1f}%)"
+                status = "stop_line_detected"
+                box_color = (0, 0, 255) 
+                speed = 0.0
+                angle = 0.0
+            else:
+                cv2.putText(display_img, f"White Ratio: {white_ratio*100:.1f}%", (roi_x_start, roi_y_start - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+        # 6. 실시간 모니터링 디스플레이 그리기
+        cv2.line(display_img, (0, scan_y), (w, scan_y), (255, 0, 0), 2)
+        
+        if not is_lane_corrupted:
+            cv2.circle(display_img, (final_L, scan_y), 6, (0, 255, 255), -1) 
+            cv2.putText(display_img, "L", (final_L - 6, scan_y - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+            cv2.circle(display_img, (final_M, scan_y), 6, (0, 128, 255), -1) 
+            cv2.putText(display_img, "M", (final_M - 6, scan_y - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 128, 255), 2)
+            cv2.circle(display_img, (final_R, scan_y), 6, (255, 255, 255), -1) 
+            cv2.putText(display_img, "R", (final_R - 6, scan_y - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+        
+        cv2.circle(display_img, (mid_x, scan_y), 5, (255, 0, 0), -1)
+        
+        int_target_x = max(min(int(mid_x + (angle / (base_kp if not is_lane_corrupted else 1.0))), w), 0)
+        cv2.circle(display_img, (int_target_x, scan_y), 6, (0, 0, 255), -1)
+        cv2.line(display_img, (mid_x, scan_y), (int_target_x, scan_y), (0, 255, 0), 3)
+
+        cv2.rectangle(display_img, (roi_x_start, roi_y_start), (roi_x_end, roi_y_end), box_color, 2)
+
+        cv2.putText(display_img, f"Status: {status_text}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, box_color, 2)
+        cv2.putText(display_img, f"Angle: {angle:.1f} | Speed: {speed:.1f}", (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+        cv2.imshow("Lane & Stopline Tracking", display_img)
+        # cv2.imshow("Unified Lane Mask (Yellow+White)", mask_lane)
+        cv2.waitKey(1)
+
+        # 7. 제어 토픽 퍼블리시
+        motor_msg = XycarMotor()
+        motor_msg.angle = max(min(angle, 100.0), -100.0)
+        motor_msg.speed = max(min(speed, 50.0), -50.0)
+        self.motor_pub.publish(motor_msg)
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = StraightTestNode()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info('Keyboard Interrupt - Stopping Test Node')
+    finally:
+        stop_msg = XycarMotor()
+        stop_msg.angle = 0.0
+        stop_msg.speed = 0.0
+        node.motor_pub.publish(stop_msg)
+        
+        cv2.destroyAllWindows()
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
