@@ -12,102 +12,159 @@ class ConeDriverNode(Node):
     def __init__(self):
         super().__init__('cone_driver')
         self.get_logger().info('🚀 라바콘 중심 주행 시작!')
-        
+
         self.motor_pub = self.create_publisher(XycarMotor, 'xycar_motor', 10)
         self.subscription = self.create_subscription(
             LaserScan, '/scan', self.lidar_callback, qos_profile_sensor_data)
-        
-        self.lidar_ranges = None
-        self.motor_msg = XycarMotor()
-        self.timer = self.create_timer(0.05, self.control_loop)
+
+        self.lidar_ranges  = None
+        self.motor_msg     = XycarMotor()
+        self.loop_timer    = self.create_timer(0.05, self.control_loop)
+
+        self.start_time    = self.get_clock().now()
+        self.status        = 'driving'   # 'driving' → 'passed'
+        self.passed_count  = 0
+        self.PASSED_THRESHOLD = 9
+
+        # 진입 감지용: 좌측 거리가 N프레임 연속 가까워야 진입으로 판단
+        self.near_count    = 0
+        self.was_detecting = False
 
     def lidar_callback(self, msg):
         self.lidar_ranges = msg.ranges
 
     def drive(self, angle, speed):
-        self.motor_msg.angle = float(max(-100.0, min(100.0, float(angle))))
-        self.motor_msg.speed = float(max(-50.0, min(50.0, float(speed))))
+        self.motor_msg.angle = float(np.clip(angle, -100.0, 100.0))
+        self.motor_msg.speed = float(np.clip(speed,  -50.0,  50.0))
         self.motor_pub.publish(self.motor_msg)
+
+    def filter_ranges(self, raw):
+        ranges = np.array(raw, dtype=np.float32)
+        ranges[np.isinf(ranges)] = 0.0
+        ranges[ranges < 0.40]    = 0.0
+        ranges[ranges > 3.0]     = 0.0
+
+        # 차체 고정 노이즈 인덱스
+        noise_idx = (
+            list(range(130, 141)) +
+            list(range(175, 186)) +
+            list(range(220, 231)) +
+            list(range(250, 265))
+        )
+        for i in noise_idx:
+            if i < len(ranges):
+                ranges[i] = 0.0
+
+        # 우측 0.80m 이하 노이즈 제거
+        for i in range(30, 150):
+            if i < len(ranges) and 0.0 < ranges[i] <= 0.80:
+                ranges[i] = 0.0
+
+        return ranges
+
+    def sector_stats(self, ranges, indices):
+        arr   = ranges[indices]
+        valid = arr[arr > 0.0]
+        count = int(len(valid))
+        mean  = float(np.mean(valid)) if count > 0 else 5.0
+        vmin  = float(np.min(valid))  if count > 0 else 5.0
+        return mean, vmin, count
 
     def control_loop(self):
         if self.lidar_ranges is None:
             return
+        if self.status == 'passed':
+            self.drive(0.0, 0.0)
+            return
 
-        ranges = np.array(self.lidar_ranges, dtype=np.float32)
+        ranges = self.filter_ranges(self.lidar_ranges)
 
-        # 1. 필터링
-        ranges[np.isinf(ranges)] = 0.0
-        ranges[ranges < 0.35]    = 0.0
-        ranges[ranges > 3.0]     = 0.0
+        front_idx = np.array(list(range(0, 30)) + list(range(330, 360)))
+        right_idx = np.arange(30, 150)
+        left_idx  = np.arange(210, 330)
 
-        # 2. 섹터 분할
-        front_idx = list(range(0, 30)) + list(range(330, 360))
-        right_idx = list(range(30, 150))
-        left_idx  = list(range(210, 330))
+        mean_left,  min_left,  left_count  = self.sector_stats(ranges, left_idx)
+        mean_right, min_right, right_count = self.sector_stats(ranges, right_idx)
+        _,          min_front, _           = self.sector_stats(ranges, front_idx)
 
-        front_ranges = ranges[front_idx]
-        right_ranges = ranges[right_idx]
-        left_ranges  = ranges[left_idx]
+        elapsed = (self.get_clock().now() - self.start_time).nanoseconds / 1e9
 
-        def valid_mean(arr):
-            valid = arr[arr > 0.0]
-            return float(np.mean(valid)) if len(valid) > 0 else 5.0
+        # ── 진입 감지: 좌측 or 우측에 물체가 3프레임 연속 보이면 진입 ──
+        # count 기반이 아니라 min 거리 기반으로 판단
+        side_detected = (min_left < 3.0 and left_count >= 3) or \
+                        (min_right < 3.0 and right_count >= 3)
 
-        def valid_min(arr):
-            valid = arr[arr > 0.0]
-            return float(np.min(valid)) if len(valid) > 0 else 5.0
-
-        mean_left  = valid_mean(left_ranges)
-        mean_right = valid_mean(right_ranges)
-        min_left   = valid_min(left_ranges)
-        min_right  = valid_min(right_ranges)
-        min_front  = valid_min(front_ranges)
-
-        left_count  = int(np.sum(left_ranges > 0.0))
-        right_count = int(np.sum(right_ranges > 0.0))
-
-        # 3. ✅ 거리 기반 동적 게인
-        #    가까운 쪽 거리가 작을수록 게인이 커짐
-        closest = min(min_left, min_right)
-        if closest < 0.5:
-            gain = 200.0   # 매우 가까움 → 강하게 꺾기
-        elif closest < 0.8:
-            gain = 150.0   # 가까움
-        elif closest < 1.2:
-            gain = 100.0    # 보통
+        if side_detected:
+            self.near_count += 1
         else:
-            gain = 70.0    # 멀면 부드럽게
+            self.near_count = max(0, self.near_count - 1)
 
-        error = float(mean_right - mean_left)
-        angle = error * gain
-        angle = float(max(-100.0, min(100.0, angle)))
-        speed = 5.0
+        if self.near_count >= 3 and not self.was_detecting:
+            self.was_detecting = True
+            self.get_logger().info(f"📍 라바콘 구간 진입! L:{mean_left:.2f}({left_count}) R:{mean_right:.2f}({right_count})")
 
-        # 4. ✅ 너무 가까우면 속도도 줄이기
-        if closest < 0.5:
-            speed = 3.0
-        elif closest < 0.7:
-            speed = 4.0
+        # ── 통과 판정: 양쪽 다 안 보이고 충분한 시간 경과 ──
+        both_clear = (left_count <= 1 and right_count <= 1)
+        if self.was_detecting and both_clear and elapsed > 5.0:
+            self.passed_count += 1
+            self.get_logger().info(f"🔍 통과 판정 중... ({self.passed_count}/{self.PASSED_THRESHOLD})")
+            if self.passed_count >= self.PASSED_THRESHOLD:
+                self.get_logger().info("✅ 라바콘 통과! → 정지!")
+                self.status = 'passed'
+                self.drive(0.0, 0.0)
+                return
+        else:
+            self.passed_count = 0
 
-        # 5. 정면 장애물 감속
-        if min_front < 0.6:
-            self.get_logger().warn(f"🚧 정면 장애물! {min_front:.2f}m")
-            speed = 2.0
+        # ── 정면 장애물 → 정지 후 후진 ──
+        if min_front < 0.45:
+            self.get_logger().warn(f"🚧 정면 {min_front:.2f}m → 후진!")
+            self.drive(0.0, -5.0)
+            return
 
-        # 6. 한쪽 미감지 시 회피
-        if left_count == 0 and right_count > 0:
-            angle = 60.0
-            self.get_logger().warn("👁️ 왼쪽 라바콘 미감지 → 왼쪽 조향")
-        elif right_count == 0 and left_count > 0:
-            angle = -60.0
-            self.get_logger().warn("👁️ 오른쪽 라바콘 미감지 → 오른쪽 조향")
+        # ── 조향 계산 ──
+        if not self.was_detecting:
+            # 진입 전: 직진
+            angle = 0.0
+            speed = 9.0
+
+        else:
+            # ★ 진입 후: 좌우 min 거리 기반으로 반응형 조향
+            # 가까운 쪽에서 멀어지는 방향으로
+            closest = min(min_left, min_right)
+
+            if closest < 0.6:
+                gain  = 200.0
+                speed = 5.0
+            elif closest < 1.0:
+                gain  = 130.0
+                speed = 7.0
+            elif closest < 1.5:
+                gain  = 80.0
+                speed = 9.0
+            else:
+                gain  = 50.0
+                speed = 9.0
+
+            # mean 기반 error (좌가 가까우면 오른쪽으로)
+            error = mean_left - mean_right
+            angle = float(np.clip(error * gain, -100.0, 100.0))
+
+            # 한쪽 완전 미감지
+            if left_count == 0 and right_count >= 2:
+                # 왼쪽 라바콘 안 보임 → 왼쪽으로 붙어있을 수 있음 → 오른쪽 유지
+                angle = max(angle, 30.0)
+                self.get_logger().warn(f"👁️ 좌 미감지 → 우측 유지 angle:{angle:.1f}")
+            elif right_count == 0 and left_count >= 2:
+                # 오른쪽 라바콘 안 보임 → 왼쪽 유지
+                angle = min(angle, -30.0)
+                self.get_logger().warn(f"👁️ 우 미감지 → 좌측 유지 angle:{angle:.1f}")
 
         self.get_logger().info(
-            f"좌평균: {mean_left:.2f}({left_count}개) | "
-            f"우평균: {mean_right:.2f}({right_count}개) | "
-            f"gain: {gain:.0f} | angle: {angle:.1f} | speed: {speed:.1f}"
+            f"좌:{mean_left:.2f}({left_count}) 우:{mean_right:.2f}({right_count}) | "
+            f"angle:{angle:.1f} spd:{speed:.1f} | "
+            f"front:{min_front:.2f} | 감지:{self.was_detecting}({self.near_count}) cnt:{self.passed_count} | {elapsed:.1f}s"
         )
-
         self.drive(angle, speed)
 
 
@@ -119,7 +176,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        node.drive(angle=0.0, speed=0.0)
+        node.drive(0.0, 0.0)
         node.destroy_node()
         rclpy.shutdown()
 
