@@ -47,9 +47,9 @@ class LaneFollower(Node):
         self.kp         = 0.002
 
         # ── 첫 번째 강제 좌회전 ───────────────────────────────────
-        self.startup_duration   = 4.0
-        self.startup_steering   = -130.0
-        self.startup_speed      = 7.0
+        self.startup_duration   = 5.0
+        self.startup_steering   = -100.0
+        self.startup_speed      = 5.0
         self._start_time        = None
         self._startup_done      = False
         self._startup_done_time = None
@@ -60,9 +60,9 @@ class LaneFollower(Node):
         # ── ㅜ자 표지 좌회전 상태 ────────────────────────────────
         self.turn_mode     = False
         self.turn_start    = None
-        self.turn_duration = 4.0
-        self.turn_steering = -120.0
-        self.turn_speed    = 7.0
+        self.turn_duration = 5.0
+        self.turn_steering = -100.0
+        self.turn_speed    = 5.0
 
         # ── 상태 추적 및 smoothing ────────────────────────────────
         self.status        = ''
