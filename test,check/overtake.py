@@ -320,7 +320,7 @@ class StraightTestNode(Node):
                 
             calc_speed = 15.0  
             
-            if time.time() - self.stage_start_time >= 2.0:
+            if time.time() - self.stage_start_time >= 3.0:
                 print(f"🔄 [STAGE 1 -> 2] 1.0초 완료! 차선 정렬 복귀를 위한 카운터 선회 진입 (1.2초간)")
                 self.evade_stage = 2
                 self.stage_start_time = time.time()
@@ -339,7 +339,7 @@ class StraightTestNode(Node):
                 
             calc_speed = 15.0  
             
-            if time.time() - self.stage_start_time >= 2.0:
+            if time.time() - self.stage_start_time >= 3.0:
                 print(f"✅ [터미널 알림] {self.evade_direction} 10도 / 속도 15 추월 완수! 카메라 차선 주행 복귀.\n")
                 self.evade_stage = 0
                 self.evade_direction = "NONE"
