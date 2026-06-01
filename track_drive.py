@@ -11,20 +11,18 @@ from rclpy.qos import qos_profile_sensor_data
 from cv_bridge import CvBridge
 
 # ==========================================
-# 개별 파일 분리 모듈 동적 임포트
+# 개별 파일 분리 모듈 동적 임포트 (Overtake 관련 삭제)
 # ==========================================
 try:
     from track_drive.three import three_mission
     from track_drive.cone import cone_mission
     from track_drive.drive import drive_mission
-    from track_drive.fast import fast_mission 
-    from track_drive.shortcut import shortcut_mission # 🌟 통합된 shortcut 임포트
+    from track_drive.shortcut import shortcut_mission
 except ImportError:
     from three import three_mission
     from cone import cone_mission
     from drive import drive_mission
-    from fast import fast_mission
-    from shortcut import shortcut_mission # 🌟 통합된 shortcut 임포트
+    from shortcut import shortcut_mission
 
 # ==========================================
 # 이미지 분석 맵 매핑 전역 상태(STATE) 상수 정의
@@ -32,10 +30,7 @@ except ImportError:
 STATE_THREE_LIGHT    = "THREE_LIGHT"
 STATE_CONE           = "CONE"
 STATE_DRIVE          = "DRIVE"
-STATE_OVERTAKE       = "OVERTAKE"
-
-STATE_SHORTCUT       = "SHORTCUT" # 🌟 3개의 상태를 1개로 통합
-
+STATE_SHORTCUT       = "SHORTCUT"
 STATE_FINISH         = "FINISH"
 
 class TrackDriverNode(Node):
@@ -46,7 +41,7 @@ class TrackDriverNode(Node):
         self.img_sub = self.create_subscription(Image, '/usb_cam/image_raw/front', self.img_callback, qos_profile_sensor_data) 
         self.lidar_sub = self.create_subscription(LaserScan, '/scan', self.lidar_callback, qos_profile_sensor_data) 
         self.imu_sub = self.create_subscription(Imu, '/imu', self.imu_callback, qos_profile_sensor_data) 
-        
+
         self.bridge = CvBridge() 
         self.cv_image = None 
         self.lidar_data = None 
@@ -93,19 +88,13 @@ class TrackDriverNode(Node):
                 self.current_state = STATE_DRIVE
 
         elif self.current_state == STATE_DRIVE:
+            # drive.py 에서 리턴한 최종 차선 좌표(final_L, M, R)를 다시 객체 변수에 저장
             angle, speed, status, self.prev_L, self.prev_M, self.prev_R = drive_mission(
                 self.cv_image, self.prev_L, self.prev_M, self.prev_R, self.lidar_data
             )
             
             if status == "left": # 🌟 4구 신호등에서 좌회전 판단 시 지름길 진입!
                 self.current_state = STATE_SHORTCUT
-            elif status == "car_detected":
-                self.current_state = STATE_OVERTAKE
-
-        elif self.current_state == STATE_OVERTAKE:
-            angle, speed, status = fast_mission(self.lidar_data)
-            if status == "passed":
-                self.current_state = STATE_DRIVE
 
         # 🌟 통합된 지름길 처리 모듈 🌟
         elif self.current_state == STATE_SHORTCUT:
