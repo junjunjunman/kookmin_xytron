@@ -1,0 +1,80 @@
+﻿image_name,cone_count,total_area_pixels,individual_areas
+cone_0370.png,0,0,
+cone_0365.png,0,0,
+cone_0375.png,0,0,
+cone_0360.png,0,0,
+cone_0330.png,0,0,
+cone_0335.png,0,0,
+cone_0345.png,0,0,
+cone_0350.png,0,0,
+cone_0385.png,0,0,
+cone_0390.png,0,0,
+cone_0380.png,0,0,
+cone_0340.png,0,0,
+cone_0355.png,0,0,
+cone_0130.png,9,7873,cone_1: 1891px | cone_2: 1150px | cone_3: 1809px | cone_4: 318px | cone_5: 423px | cone_6: 557px | cone_7: 881px | cone_8: 449px | cone_9: 395px
+cone_0120.png,9,7875,cone_1: 1873px | cone_2: 1183px | cone_3: 1827px | cone_4: 375px | cone_5: 312px | cone_6: 557px | cone_7: 888px | cone_8: 381px | cone_9: 479px
+cone_0165.png,9,7890,cone_1: 1892px | cone_2: 1157px | cone_3: 1825px | cone_4: 337px | cone_5: 379px | cone_6: 569px | cone_7: 894px | cone_8: 387px | cone_9: 450px
+cone_0220.png,11,8437,cone_1: 938px | cone_2: 2152px | cone_3: 1398px | cone_4: 1010px | cone_5: 523px | cone_6: 652px | cone_7: 333px | cone_8: 521px | cone_9: 334px | cone_10: 196px | cone_11: 380px
+cone_0205.png,10,8446,cone_1: 1222px | cone_2: 1871px | cone_3: 1891px | cone_4: 280px | cone_5: 419px | cone_6: 896px | cone_7: 569px | cone_8: 384px | cone_9: 453px | cone_10: 461px
+cone_0040.png,10,8453,cone_1: 1892px | cone_2: 1200px | cone_3: 1879px | cone_4: 338px | cone_5: 915px | cone_6: 617px | cone_7: 444px | cone_8: 689px | cone_9: 387px | cone_10: 92px
+cone_0200.png,10,8456,cone_1: 1874px | cone_2: 1160px | cone_3: 1842px | cone_4: 318px | cone_5: 379px | cone_6: 578px | cone_7: 883px | cone_8: 392px | cone_9: 477px | cone_10: 553px
+cone_0215.png,10,8472,cone_1: 1206px | cone_2: 1885px | cone_3: 1882px | cone_4: 318px | cone_5: 565px | cone_6: 391px | cone_7: 874px | cone_8: 494px | cone_9: 304px | cone_10: 553px
+cone_0195.png,10,8559,cone_1: 1898px | cone_2: 1252px | cone_3: 1832px | cone_4: 332px | cone_5: 889px | cone_6: 632px | cone_7: 374px | cone_8: 394px | cone_9: 485px | cone_10: 471px
+cone_0145.png,10,8705,cone_1: 1891px | cone_2: 1202px | cone_3: 1895px | cone_4: 322px | cone_5: 891px | cone_6: 375px | cone_7: 571px | cone_8: 370px | cone_9: 473px | cone_10: 715px
+cone_0180.png,10,8728,cone_1: 1869px | cone_2: 1207px | cone_3: 1850px | cone_4: 318px | cone_5: 384px | cone_6: 574px | cone_7: 894px | cone_8: 769px | cone_9: 391px | cone_10: 472px
+cone_0175.png,10,8791,cone_1: 1881px | cone_2: 1213px | cone_3: 1867px | cone_4: 342px | cone_5: 378px | cone_6: 632px | cone_7: 900px | cone_8: 379px | cone_9: 477px | cone_10: 722px
+cone_0110.png,11,8855,cone_1: 1874px | cone_2: 1191px | cone_3: 1814px | cone_4: 324px | cone_5: 645px | cone_6: 903px | cone_7: 426px | cone_8: 375px | cone_9: 487px | cone_10: 726px | cone_11: 90px
+cone_0015.png,10,8868,cone_1: 1181px | cone_2: 1886px | cone_3: 1925px | cone_4: 379px | cone_5: 921px | cone_6: 406px | cone_7: 639px | cone_8: 708px | cone_9: 362px | cone_10: 461px
+cone_0060.png,11,8962,cone_1: 1210px | cone_2: 1907px | cone_3: 1829px | cone_4: 371px | cone_5: 438px | cone_6: 666px | cone_7: 920px | cone_8: 708px | cone_9: 370px | cone_10: 466px | cone_11: 77px
+cone_0090.png,11,9051,cone_1: 1873px | cone_2: 1208px | cone_3: 1862px | cone_4: 332px | cone_5: 420px | cone_6: 594px | cone_7: 885px | cone_8: 464px | cone_9: 569px | cone_10: 375px | cone_11: 469px
+cone_0210.png,11,9196,cone_1: 1863px | cone_2: 1141px | cone_3: 1770px | cone_4: 331px | cone_5: 364px | cone_6: 566px | cone_7: 897px | cone_8: 394px | cone_9: 917px | cone_10: 467px | cone_11: 486px
+cone_0105.png,11,9209,cone_1: 1897px | cone_2: 1201px | cone_3: 1839px | cone_4: 312px | cone_5: 565px | cone_6: 374px | cone_7: 884px | cone_8: 364px | cone_9: 382px | cone_10: 908px | cone_11: 483px
+cone_0190.png,11,9217,cone_1: 1234px | cone_2: 1891px | cone_3: 1863px | cone_4: 333px | cone_5: 375px | cone_6: 572px | cone_7: 916px | cone_8: 468px | cone_9: 369px | cone_10: 453px | cone_11: 743px
+cone_0140.png,12,9227,cone_1: 1167px | cone_2: 1895px | cone_3: 1851px | cone_4: 314px | cone_5: 596px | cone_6: 373px | cone_7: 896px | cone_8: 383px | cone_9: 729px | cone_10: 468px | cone_11: 466px | cone_12: 89px
+cone_0150.png,11,9231,cone_1: 1886px | cone_2: 1172px | cone_3: 1871px | cone_4: 318px | cone_5: 902px | cone_6: 568px | cone_7: 380px | cone_8: 394px | cone_9: 547px | cone_10: 462px | cone_11: 731px
+cone_0080.png,11,9279,cone_1: 1893px | cone_2: 1233px | cone_3: 1896px | cone_4: 324px | cone_5: 563px | cone_6: 379px | cone_7: 361px | cone_8: 904px | cone_9: 908px | cone_10: 701px | cone_11: 117px
+cone_0075.png,12,9323,cone_1: 1900px | cone_2: 1220px | cone_3: 1904px | cone_4: 332px | cone_5: 900px | cone_6: 572px | cone_7: 423px | cone_8: 393px | cone_9: 722px | cone_10: 94px | cone_11: 468px | cone_12: 395px
+cone_0125.png,11,9336,cone_1: 1883px | cone_2: 1162px | cone_3: 1842px | cone_4: 322px | cone_5: 564px | cone_6: 433px | cone_7: 885px | cone_8: 380px | cone_9: 484px | cone_10: 478px | cone_11: 903px
+cone_0005.png,11,9337,cone_1: 1197px | cone_2: 1897px | cone_3: 1844px | cone_4: 332px | cone_5: 376px | cone_6: 927px | cone_7: 379px | cone_8: 635px | cone_9: 716px | cone_10: 929px | cone_11: 105px
+cone_0010.png,11,9417,cone_1: 1892px | cone_2: 1148px | cone_3: 1904px | cone_4: 338px | cone_5: 433px | cone_6: 653px | cone_7: 357px | cone_8: 956px | cone_9: 713px | cone_10: 928px | cone_11: 95px
+cone_0135.png,12,9689,cone_1: 1172px | cone_2: 1883px | cone_3: 1919px | cone_4: 328px | cone_5: 888px | cone_6: 353px | cone_7: 547px | cone_8: 712px | cone_9: 530px | cone_10: 479px | cone_11: 398px | cone_12: 480px
+cone_0020.png,12,9699,cone_1: 1875px | cone_2: 1175px | cone_3: 1830px | cone_4: 350px | cone_5: 374px | cone_6: 429px | cone_7: 583px | cone_8: 913px | cone_9: 911px | cone_10: 93px | cone_11: 702px | cone_12: 464px
+cone_0095.png,13,9706,cone_1: 1850px | cone_2: 1162px | cone_3: 1844px | cone_4: 322px | cone_5: 893px | cone_6: 378px | cone_7: 557px | cone_8: 382px | cone_9: 478px | cone_10: 539px | cone_11: 92px | cone_12: 725px | cone_13: 484px
+cone_0055.png,13,9734,cone_1: 1893px | cone_2: 1216px | cone_3: 1805px | cone_4: 331px | cone_5: 920px | cone_6: 575px | cone_7: 729px | cone_8: 385px | cone_9: 423px | cone_10: 467px | cone_11: 114px | cone_12: 455px | cone_13: 421px
+cone_0025.png,12,9769,cone_1: 1899px | cone_2: 1224px | cone_3: 1847px | cone_4: 332px | cone_5: 577px | cone_6: 441px | cone_7: 383px | cone_8: 920px | cone_9: 701px | cone_10: 905px | cone_11: 439px | cone_12: 101px
+cone_0035.png,13,9861,cone_1: 1201px | cone_2: 1895px | cone_3: 1888px | cone_4: 328px | cone_5: 424px | cone_6: 577px | cone_7: 927px | cone_8: 367px | cone_9: 679px | cone_10: 929px | cone_11: 470px | cone_12: 82px | cone_13: 94px
+cone_0065.png,13,9871,cone_1: 1924px | cone_2: 1245px | cone_3: 1785px | cone_4: 338px | cone_5: 399px | cone_6: 918px | cone_7: 646px | cone_8: 389px | cone_9: 120px | cone_10: 733px | cone_11: 488px | cone_12: 409px | cone_13: 477px
+cone_0185.png,12,9917,cone_1: 1906px | cone_2: 1271px | cone_3: 1855px | cone_4: 337px | cone_5: 380px | cone_6: 561px | cone_7: 911px | cone_8: 393px | cone_9: 499px | cone_10: 489px | cone_11: 771px | cone_12: 544px
+cone_0170.png,12,10059,cone_1: 1945px | cone_2: 1203px | cone_3: 1900px | cone_4: 324px | cone_5: 379px | cone_6: 574px | cone_7: 881px | cone_8: 393px | cone_9: 783px | cone_10: 735px | cone_11: 465px | cone_12: 477px
+cone_0030.png,12,10252,cone_1: 1861px | cone_2: 1184px | cone_3: 1862px | cone_4: 372px | cone_5: 431px | cone_6: 655px | cone_7: 715px | cone_8: 906px | cone_9: 386px | cone_10: 933px | cone_11: 473px | cone_12: 474px
+cone_0000.png,13,10272,cone_1: 1878px | cone_2: 1232px | cone_3: 1864px | cone_4: 336px | cone_5: 459px | cone_6: 634px | cone_7: 938px | cone_8: 934px | cone_9: 391px | cone_10: 407px | cone_11: 716px | cone_12: 88px | cone_13: 395px
+cone_0160.png,12,10311,cone_1: 1883px | cone_2: 1229px | cone_3: 1845px | cone_4: 342px | cone_5: 561px | cone_6: 425px | cone_7: 408px | cone_8: 897px | cone_9: 920px | cone_10: 768px | cone_11: 546px | cone_12: 487px
+cone_0085.png,13,10383,cone_1: 1865px | cone_2: 1183px | cone_3: 1810px | cone_4: 313px | cone_5: 371px | cone_6: 582px | cone_7: 884px | cone_8: 366px | cone_9: 701px | cone_10: 469px | cone_11: 912px | cone_12: 471px | cone_13: 456px
+cone_0070.png,13,10408,cone_1: 1895px | cone_2: 1242px | cone_3: 1941px | cone_4: 333px | cone_5: 405px | cone_6: 579px | cone_7: 390px | cone_8: 927px | cone_9: 723px | cone_10: 898px | cone_11: 89px | cone_12: 491px | cone_13: 495px
+cone_0045.png,13,10430,cone_1: 1255px | cone_2: 1875px | cone_3: 1888px | cone_4: 361px | cone_5: 614px | cone_6: 935px | cone_7: 395px | cone_8: 446px | cone_9: 723px | cone_10: 942px | cone_11: 455px | cone_12: 457px | cone_13: 84px
+cone_0100.png,13,10512,cone_1: 1882px | cone_2: 1181px | cone_3: 1811px | cone_4: 312px | cone_5: 559px | cone_6: 379px | cone_7: 914px | cone_8: 460px | cone_9: 460px | cone_10: 922px | cone_11: 382px | cone_12: 705px | cone_13: 545px
+cone_0115.png,13,10526,cone_1: 1849px | cone_2: 1156px | cone_3: 1848px | cone_4: 351px | cone_5: 413px | cone_6: 538px | cone_7: 888px | cone_8: 370px | cone_9: 576px | cone_10: 889px | cone_11: 472px | cone_12: 455px | cone_13: 721px
+cone_0155.png,13,10530,cone_1: 1871px | cone_2: 1212px | cone_3: 1872px | cone_4: 319px | cone_5: 897px | cone_6: 374px | cone_7: 573px | cone_8: 390px | cone_9: 453px | cone_10: 567px | cone_11: 471px | cone_12: 740px | cone_13: 791px
+cone_0050.png,14,10933,cone_1: 1264px | cone_2: 1903px | cone_3: 1901px | cone_4: 356px | cone_5: 607px | cone_6: 937px | cone_7: 423px | cone_8: 723px | cone_9: 472px | cone_10: 388px | cone_11: 942px | cone_12: 514px | cone_13: 95px | cone_14: 408px
+cone_0225.png,11,12231,cone_1: 496px | cone_2: 650px | cone_3: 2796px | cone_4: 1410px | cone_5: 1090px | cone_6: 1642px | cone_7: 2832px | cone_8: 386px | cone_9: 474px | cone_10: 101px | cone_11: 354px
+cone_0300.png,6,18307,cone_1: 4186px | cone_2: 2147px | cone_3: 8968px | cone_4: 1111px | cone_5: 536px | cone_6: 1359px
+cone_0290.png,6,18310,cone_1: 4342px | cone_2: 2371px | cone_3: 7981px | cone_4: 1168px | cone_5: 1544px | cone_6: 904px
+cone_0285.png,8,18552,cone_1: 7040px | cone_2: 4234px | cone_3: 2497px | cone_4: 1675px | cone_5: 1196px | cone_6: 852px | cone_7: 411px | cone_8: 647px
+cone_0295.png,6,19071,cone_1: 4264px | cone_2: 2364px | cone_3: 9472px | cone_4: 1463px | cone_5: 1097px | cone_6: 411px
+cone_0230.png,18,20393,cone_1: 3725px | cone_2: 3906px | cone_3: 383px | cone_4: 588px | cone_5: 2121px | cone_6: 749px | cone_7: 2102px | cone_8: 469px | cone_9: 220px | cone_10: 1334px | cone_11: 475px | cone_12: 792px | cone_13: 230px | cone_14: 132px | cone_15: 192px | cone_16: 804px | cone_17: 2007px | cone_18: 164px
+cone_0270.png,14,22003,cone_1: 3128px | cone_2: 1243px | cone_3: 796px | cone_4: 945px | cone_5: 353px | cone_6: 533px | cone_7: 1079px | cone_8: 720px | cone_9: 538px | cone_10: 1935px | cone_11: 1986px | cone_12: 537px | cone_13: 734px | cone_14: 7476px
+cone_0305.png,5,22708,cone_1: 1959px | cone_2: 3659px | cone_3: 8892px | cone_4: 6770px | cone_5: 1428px
+cone_0265.png,15,23452,cone_1: 2402px | cone_2: 1306px | cone_3: 1867px | cone_4: 7842px | cone_5: 506px | cone_6: 999px | cone_7: 759px | cone_8: 730px | cone_9: 827px | cone_10: 310px | cone_11: 538px | cone_12: 3604px | cone_13: 623px | cone_14: 601px | cone_15: 538px
+cone_0320.png,2,23636,cone_1: 17897px | cone_2: 5739px
+cone_0255.png,18,24761,cone_1: 2453px | cone_2: 6474px | cone_3: 388px | cone_4: 1073px | cone_5: 4881px | cone_6: 518px | cone_7: 1521px | cone_8: 549px | cone_9: 339px | cone_10: 640px | cone_11: 525px | cone_12: 447px | cone_13: 1454px | cone_14: 553px | cone_15: 523px | cone_16: 1458px | cone_17: 350px | cone_18: 615px
+cone_0260.png,15,25221,cone_1: 3205px | cone_2: 2248px | cone_3: 4315px | cone_4: 3768px | cone_5: 1028px | cone_6: 4401px | cone_7: 1315px | cone_8: 339px | cone_9: 823px | cone_10: 853px | cone_11: 524px | cone_12: 396px | cone_13: 633px | cone_14: 666px | cone_15: 707px
+cone_0240.png,16,26549,cone_1: 5969px | cone_2: 4884px | cone_3: 2358px | cone_4: 606px | cone_5: 1415px | cone_6: 3779px | cone_7: 2722px | cone_8: 640px | cone_9: 377px | cone_10: 228px | cone_11: 391px | cone_12: 248px | cone_13: 937px | cone_14: 255px | cone_15: 406px | cone_16: 1334px
+cone_0275.png,17,28218,cone_1: 2753px | cone_2: 1721px | cone_3: 5375px | cone_4: 1139px | cone_5: 503px | cone_6: 956px | cone_7: 399px | cone_8: 1359px | cone_9: 712px | cone_10: 952px | cone_11: 7689px | cone_12: 481px | cone_13: 887px | cone_14: 504px | cone_15: 723px | cone_16: 1345px | cone_17: 720px
+cone_0280.png,9,28972,cone_1: 12168px | cone_2: 2487px | cone_3: 1156px | cone_4: 4520px | cone_5: 4096px | cone_6: 1583px | cone_7: 1293px | cone_8: 975px | cone_9: 694px
+cone_0325.png,2,29133,cone_1: 14572px | cone_2: 14561px
+cone_0250.png,13,29738,cone_1: 8516px | cone_2: 3531px | cone_3: 1082px | cone_4: 469px | cone_5: 1657px | cone_6: 414px | cone_7: 403px | cone_8: 6252px | cone_9: 293px | cone_10: 828px | cone_11: 2990px | cone_12: 316px | cone_13: 2987px
+cone_0315.png,3,30023,cone_1: 6492px | cone_2: 2928px | cone_3: 20603px
+cone_0235.png,19,30644,cone_1: 2829px | cone_2: 6770px | cone_3: 6996px | cone_4: 944px | cone_5: 3401px | cone_6: 1801px | cone_7: 499px | cone_8: 1068px | cone_9: 307px | cone_10: 286px | cone_11: 468px | cone_12: 744px | cone_13: 570px | cone_14: 267px | cone_15: 482px | cone_16: 1773px | cone_17: 223px | cone_18: 269px | cone_19: 947px
+cone_0310.png,4,32229,cone_1: 3197px | cone_2: 1812px | cone_3: 7615px | cone_4: 19605px
+cone_0245.png,16,40842,cone_1: 1937px | cone_2: 4469px | cone_3: 2059px | cone_4: 1248px | cone_5: 3684px | cone_6: 352px | cone_7: 5572px | cone_8: 227px | cone_9: 372px | cone_10: 405px | cone_11: 698px | cone_12: 216px | cone_13: 9218px | cone_14: 668px | cone_15: 580px | cone_16: 9137px
